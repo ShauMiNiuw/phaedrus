@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Phädrus Vokabeltrainer - Live Leaderboard</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="icon.png">
+    
     <!-- Firebase SDKs für Firestore -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -26,78 +29,77 @@
             background: var(--bg-color);
             color: var(--text-color);
             margin: 0;
-            padding: 20px;
+            padding: 15px;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
+            box-sizing: border-box;
         }
         .container {
             width: 100%;
             max-width: 650px;
             background: var(--card-bg);
-            border-radius: 24px;
-            padding: 30px;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
             box-sizing: border-box;
         }
         h1 {
             text-align: center;
             margin-top: 0;
-            font-size: 1.8rem;
+            font-size: 1.6rem;
             color: #818cf8;
         }
         .stats {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 20px;
-            font-size: 0.95rem;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
             color: #94a3b8;
             font-weight: bold;
         }
         .question-card {
             background: #0f172a;
             border: 2px solid var(--border);
-            border-radius: 16px;
-            padding: 24px;
+            border-radius: 14px;
+            padding: 20px;
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
         .word {
-            font-size: 2rem;
+            font-size: 1.8rem;
             font-weight: 800;
             margin-bottom: 8px;
             color: #f1f5f9;
+            word-break: break-word;
         }
         .pos {
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             color: #94a3b8;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
             text-transform: uppercase;
             letter-spacing: 1px;
         }
         .options-grid {
             display: grid;
             grid-template-columns: 1fr;
-            gap: 12px;
+            gap: 10px;
         }
         .option-btn {
             background: #334155;
             color: white;
             border: none;
-            padding: 14px 18px;
+            padding: 16px;
             border-radius: 12px;
-            font-size: 1.1rem;
+            font-size: 1rem;
             cursor: pointer;
             transition: all 0.2s ease;
             text-align: left;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+            -webkit-tap-highlight-color: transparent;
         }
-        .option-btn:hover:not(:disabled) {
-            background: #475569;
-            transform: translateY(-2px);
+        .option-btn:active:not(:disabled) {
+            transform: scale(0.98);
         }
         .option-btn.correct {
             background: var(--success) !important;
@@ -111,14 +113,15 @@
             background: var(--accent);
             color: white;
             border: none;
-            padding: 14px 24px;
+            padding: 14px;
             border-radius: 12px;
-            font-size: 1.1rem;
+            font-size: 1rem;
             font-weight: bold;
             cursor: pointer;
             width: 100%;
             transition: background 0.2s;
             margin-top: 10px;
+            -webkit-tap-highlight-color: transparent;
         }
         .btn-primary:hover {
             background: var(--accent-hover);
@@ -130,25 +133,32 @@
             border: 2px solid var(--border);
             background: #0f172a;
             color: white;
-            font-size: 1.1rem;
+            font-size: 1rem;
             box-sizing: border-box;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
         .leaderboard-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 15px;
+            margin-top: 10px;
+            font-size: 0.9rem;
         }
         .leaderboard-table th, .leaderboard-table td {
-            padding: 10px;
+            padding: 8px;
             text-align: left;
             border-bottom: 1px solid var(--border);
         }
         .leaderboard-table th {
             color: #94a3b8;
-            font-size: 0.9rem;
         }
         .hidden { display: none !important; }
+
+        @media (min-width: 600px) {
+            body { padding: 20px; }
+            .container { padding: 30px; }
+            h1 { font-size: 1.8rem; }
+            .word { font-size: 2rem; }
+        }
     </style>
 </head>
 <body>
@@ -158,7 +168,7 @@
 
     <!-- Start-Bildschirm -->
     <div id="start-screen">
-        <p style="text-align: center; color: #94a3b8; margin-bottom: 25px;">Teste dein Wissen mit allen 131 Vokabeln der 1. Stunde (20 Fragen pro Runde).</p>
+        <p style="text-align: center; color: #94a3b8; margin-bottom: 25px; font-size: 0.95rem;">Teste dein Wissen mit allen 131 Vokabeln der 1. Stunde (20 Fragen pro Runde).</p>
         <button class="btn-primary" onclick="startQuiz()">Quiz starten</button>
     </div>
 
@@ -173,14 +183,14 @@
             <div class="pos" id="vocab-pos">Adj.</div>
         </div>
         <div class="options-grid" id="options-container">
-            <!-- Dynamische Antwortmöglichkeiten -->
+            <!-- Dynamische Antworten -->
         </div>
     </div>
 
     <!-- Ergebnis-Bildschirm -->
     <div id="result-screen" class="hidden">
-        <h2 style="text-align: center;">Runde beendet! 🎉</h2>
-        <p style="text-align: center; font-size: 1.2rem;">Dein Score: <b id="final-score" style="color: #818cf8;">0</b> von 20</p>
+        <h2 style="text-align: center; font-size: 1.4rem;">Runde beendet! 🎉</h2>
+        <p style="text-align: center; font-size: 1.1rem;">Dein Score: <b id="final-score" style="color: #818cf8;">0</b> von 20</p>
         
         <div id="save-score-box">
             <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 8px;">Trage deinen Namen für das Live-Leaderboard ein:</p>
@@ -188,7 +198,7 @@
             <button class="btn-primary" onclick="saveScore()">Score speichern</button>
         </div>
 
-        <h3 style="margin-top: 30px; border-bottom: 2px solid var(--border); padding-bottom: 8px;">🏆 Live Leaderboard</h3>
+        <h3 style="margin-top: 25px; border-bottom: 2px solid var(--border); padding-bottom: 6px; font-size: 1.1rem;">🏆 Live Leaderboard</h3>
         <table class="leaderboard-table">
             <thead>
                 <tr>
@@ -206,7 +216,7 @@
 </div>
 
 <script>
-    // Alle 131 Vokabeln aus deiner Datei extrahiert
+    // Alle 131 Vokabeln
     const vocabList = [
         {w: "alienus, aliena, alienum", p: "Adj.", a: "fremd"},
         {w: "bellum, belli", p: "n.", a: "der Krieg"},
@@ -339,29 +349,31 @@
     let currentIndex = 0;
     let score = 0;
 
-    // Firebase Konfiguration (Hier trägst du später deine Firebase-Daten ein)
-const firebaseConfig = {
-  apiKey: "AIzaSyB1tHZTQv5HAji4PfBNNdEfFekpMlX8n24",
-  authDomain: "phaedrus-4634e.firebaseapp.com",
-  projectId: "phaedrus-4634e",
-  storageBucket: "phaedrus-4634e.firebasestorage.app",
-  messagingSenderId: "547577030892",
-  appId: "1:547577030892:web:416cebb84cede852865dc9"
-};
-
+    // Firebase Konfiguration
+    const firebaseConfig = {
+        apiKey: "AIzaSyB1tHZTQv5HAji4PfBNNdEfFekpMlX8n24",
+        authDomain: "phaedrus-4634e.firebaseapp.com",
+        projectId: "phaedrus-4634e",
+        storageBucket: "phaedrus-4634e.firebasestorage.app",
+        messagingSenderId: "547577030892",
+        appId: "1:547577030892:web:416cebb84cede852865dc9"
+    };
 
     let db = null;
     try {
+        if (!window.firebaseModules) {
+            throw new Error("Firebase-Module noch nicht geladen.");
+        }
         const app = window.firebaseModules.initializeApp(firebaseConfig);
         db = window.firebaseModules.getFirestore(app);
+        console.log("Firebase erfolgreich verbunden!");
     } catch(e) {
-        console.log("Firebase nicht initialisiert (Demo-Modus / Platzhalter).");
+        console.error("Firebase Initialisierungsfehler:", e);
     }
 
     function startQuiz() {
         score = 0;
         currentIndex = 0;
-        // 20 zufällige Fragen auswählen
         currentQuestions = [...vocabList].sort(() => 0.5 - Math.random()).slice(0, 20);
         
         document.getElementById('start-screen').classList.add('hidden');
@@ -382,7 +394,6 @@ const firebaseConfig = {
         document.getElementById('vocab-word').innerText = q.w;
         document.getElementById('vocab-pos').innerText = q.p;
 
-        // 4 falsche Antworten + 1 richtige Antwort ermitteln
         let options = [q.a];
         while (options.length < 5) {
             let randomVocab = vocabList[Math.floor(Math.random() * vocabList.length)];
@@ -390,7 +401,6 @@ const firebaseConfig = {
                 options.push(randomVocab.a);
             }
         }
-        // Mischen
         options.sort(() => 0.5 - Math.random());
 
         const container = document.getElementById('options-container');
@@ -413,7 +423,6 @@ const firebaseConfig = {
             score++;
         } else {
             button.classList.add('wrong');
-            // Zeige die richtige an
             buttons.forEach(b => {
                 const q = currentQuestions[currentIndex];
                 if (b.innerText === q.a) b.classList.add('correct');
@@ -436,7 +445,7 @@ const firebaseConfig = {
     async function saveScore() {
         const name = document.getElementById('player-name').value.trim() || "Anonym";
         if (!db) {
-            alert("Firebase ist noch nicht konfiguriert! Trage deine Firebase-Config im Code ein.");
+            alert("Firebase ist nicht verbunden. Überprüfe die Konsole (F12).");
             return;
         }
         try {
@@ -457,7 +466,7 @@ const firebaseConfig = {
         tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #94a3b8;">Lade...</td></tr>`;
         
         if (!db) {
-            tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #ef4444;">Firebase-Config fehlt (Demo-Modus)</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #ef4444;">Firebase nicht verbunden</td></tr>`;
             return;
         }
 
