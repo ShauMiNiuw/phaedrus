@@ -3,17 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phädrus Vokabeltrainer - Live Leaderboard</title>
+    <title>Phädrus Vokabeltrainer - Gamified Leaderboards</title>
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="icon.png">
     
-    <!-- Firebase Initialisierung im Modul (verhindert Timing-Fehler) -->
+    <!-- Firebase & Vokabel-Module importieren -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-        
+        import { phaedrus1, phaedrus2 } from "./voc.js";
+
+        // Global verfügbar machen
         window.firebaseModules = { collection, addDoc, getDocs, query, orderBy, limit };
-        
+        window.vocData = { 
+            p1: phaedrus1, 
+            p2: phaedrus2 
+        };
+
         const firebaseConfig = {
             apiKey: "AIzaSyB1tHZTQv5HAji4PfBNNdEfFekpMlX8n24",
             authDomain: "phaedrus-4634e.firebaseapp.com",
@@ -42,6 +48,7 @@
             --success: #22c55e;
             --error: #ef4444;
             --border: #334155;
+            --xp-color: #f59e0b;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -74,9 +81,13 @@
             display: flex;
             justify-content: space-between;
             margin-bottom: 15px;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
             color: #94a3b8;
             font-weight: bold;
+        }
+        .xp-badge {
+            color: var(--xp-color);
+            font-weight: 800;
         }
         .question-card {
             background: #0f172a;
@@ -92,13 +103,6 @@
             margin-bottom: 8px;
             color: #f1f5f9;
             word-break: break-word;
-        }
-        .pos {
-            font-size: 0.85rem;
-            color: #94a3b8;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
         }
         .options-grid {
             display: grid;
@@ -145,6 +149,25 @@
         .btn-primary:hover {
             background: var(--accent-hover);
         }
+        .mode-selection {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .btn-mode {
+            flex: 1;
+            padding: 12px;
+            border-radius: 10px;
+            border: 2px solid var(--border);
+            background: #0f172a;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-mode.active {
+            border-color: var(--accent);
+            background: var(--accent);
+        }
         input[type="text"] {
             width: 100%;
             padding: 14px;
@@ -183,23 +206,42 @@
 <body>
 
 <div class="container">
-    <h1>📜 Phädrus Vokabeltrainer</h1>
+    <h1>📜 Phädrus Trainer</h1>
 
     <!-- Start-Bildschirm -->
     <div id="start-screen">
-        <p style="text-align: center; color: #94a3b8; margin-bottom: 25px; font-size: 0.95rem;">Teste dein Wissen mit allen 131 Vokabeln der 1. Stunde (20 Fragen pro Runde).</p>
-        <button class="btn-primary" onclick="startQuiz()">Quiz starten</button>
+        <p style="text-align: center; color: #94a3b8; margin-bottom: 15px; font-size: 0.95rem;">Wähle deinen Kurs und sammle XP (20 Fragen pro Runde):</p>
+        
+        <div class="mode-selection">
+            <button class="btn-mode active" id="btn-p1" onclick="selectMode('p1')">Phädrus 1</button>
+            <button class="btn-mode" id="btn-p2" onclick="selectMode('p2')">Phädrus 2</button>
+        </div>
+
+        <button class="btn-primary" onclick="startQuiz()">Quiz starten (+10 XP pro Frage)</button>
+
+        <h3 style="margin-top: 30px; border-bottom: 2px solid var(--border); padding-bottom: 6px; font-size: 1.1rem;">🏆 Leaderboard (<span id="leaderboard-title">Phädrus 1</span>)</h3>
+        <table class="leaderboard-table">
+            <thead>
+                <tr>
+                    <th>Rang</th>
+                    <th>Name</th>
+                    <th>Erreichte XP</th>
+                </tr>
+            </thead>
+            <tbody id="start-leaderboard-body">
+                <tr><td colspan="3" style="text-align: center; color: #94a3b8;">Lade Bestenliste...</td></tr>
+            </tbody>
+        </table>
     </div>
 
     <!-- Quiz-Bildschirm -->
     <div id="quiz-screen" class="hidden">
         <div class="stats">
             <span id="question-counter">Frage 1 von 20</span>
-            <span id="score-counter">Punkte: 0</span>
+            <span class="xp-badge" id="xp-counter">⚡ 0 XP</span>
         </div>
         <div class="question-card">
-            <div class="word" id="vocab-word">alienus</div>
-            <div class="pos" id="vocab-pos">Adj.</div>
+            <div class="word" id="vocab-word">---</div>
         </div>
         <div class="options-grid" id="options-container">
             <!-- Dynamische Antworten -->
@@ -209,169 +251,58 @@
     <!-- Ergebnis-Bildschirm -->
     <div id="result-screen" class="hidden">
         <h2 style="text-align: center; font-size: 1.4rem;">Runde beendet! 🎉</h2>
-        <p style="text-align: center; font-size: 1.1rem;">Dein Score: <b id="final-score" style="color: #818cf8;">0</b> von 20</p>
+        <p style="text-align: center; font-size: 1.2rem;">Du hast <b id="final-xp" class="xp-badge">0 XP</b> gesammelt!</p>
         
         <div id="save-score-box">
-            <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 8px;">Trage deinen Namen für das Live-Leaderboard ein:</p>
+            <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 8px;">Trage deinen Namen für das <span id="save-mode-label">Phädrus 1</span> Leaderboard ein:</p>
             <input type="text" id="player-name" placeholder="Dein Name..." maxlength="20">
-            <button class="btn-primary" onclick="saveScore()">Score speichern</button>
+            <button class="btn-primary" onclick="saveScore()">XP auf Leaderboard speichern</button>
         </div>
 
-        <h3 style="margin-top: 25px; border-bottom: 2px solid var(--border); padding-bottom: 6px; font-size: 1.1rem;">🏆 Live Leaderboard</h3>
+        <h3 style="margin-top: 25px; border-bottom: 2px solid var(--border); padding-bottom: 6px; font-size: 1.1rem;">🏆 Top 10 (<span id="result-leaderboard-title">Phädrus 1</span>)</h3>
         <table class="leaderboard-table">
             <thead>
                 <tr>
                     <th>Rang</th>
                     <th>Name</th>
-                    <th>Punkte</th>
+                    <th>XP</th>
                 </tr>
             </thead>
-            <tbody id="leaderboard-body">
+            <tbody id="result-leaderboard-body">
                 <tr><td colspan="3" style="text-align: center; color: #94a3b8;">Lade Bestenliste...</td></tr>
             </tbody>
         </table>
-        <button class="btn-primary" style="margin-top: 20px; background: #334155;" onclick="startQuiz()">Nochmal spielen</button>
+        <button class="btn-primary" style="margin-top: 20px; background: #334155;" onclick="resetToStart()">Zurück zum Hauptmenü</button>
     </div>
 </div>
 
 <script>
-    // Alle 131 Vokabeln
-    const vocabList = [
-        {w: "alienus, aliena, alienum", p: "Adj.", a: "fremd"},
-        {w: "bellum, belli", p: "n.", a: "der Krieg"},
-        {w: "bos, bovis", p: "m./f.", a: "der Ochse, das Rind"},
-        {w: "calamitas, calamitatis", p: "f.", a: "das Unglück, der Schaden"},
-        {w: "conspicere, conspicio, conspexi", p: "V.", a: "erblicken"},
-        {w: "contentus, contenta, contentum", p: "Adj.", a: "zufrieden"},
-        {w: "cum + Subj./Ind.", p: "Konj.", a: "als (plötzlich), zu der Zeit als, immer wenn; während, solange, bis"},
-        {w: "esse, sum, fui", p: "V.", a: "sein, sich befinden"},
-        {w: "experiri, experior, expertus sum", p: "V.", a: "versuchen, ausprobieren, riskieren"},
-        {w: "ingens, ingens, ingens; Gen. ingentis", p: "Adj.", a: "gewaltig, ungeheuer, riesig"},
-        {w: "iniuria, iniuriae", p: "f.", a: "das Unrecht, die Beleidigung"},
-        {w: "invidia, invidiae", p: "f.", a: "der Neid, der Hass"},
-        {w: "latus, lata, latum", p: "Adj.", a: "breit, weit"},
-        {w: "maior, maior, maius; Gen. maioris", p: "Adj.", a: "größer"},
-        {w: "modus, modi", p: "m.", a: "die Art, die Weise; das Maß"},
-        {w: "movere, moveo, movi, motum", p: "V.", a: "bewegen, beeindrucken"},
-        {w: "noster, nostra, nostrum", p: "Poss.-Adj.", a: "unser"},
-        {w: "os, oris", p: "n.", a: "der Mund, das Gesicht"},
-        {w: "pati, patior, passus sum", p: "V.", a: "leiden, erleiden, ertragen; zulassen"},
-        {w: "potens, potentis", p: "Adj.", a: "mächtig, einflussreich, stark"},
-        {w: "potius", p: "Adv.", a: "eher, lieber"},
-        {w: "prius", p: "Adv.", a: "früher, zuerst"},
-        {w: "quaerere, quaero, quaesivi, quaesitum", p: "V.", a: "suchen, untersuchen; erwerben, anstreben; fragen"},
-        {w: "queri, queror, questus sum", p: "V.", a: "klagen, sich beklagen (über)"},
-        {w: "quis?", p: "Pron.", a: "wer?"},
-        {w: "quondam", p: "Adv.", a: "einst, einmal; manchmal"},
-        {w: "rana", p: "f.", a: "der Frosch"},
-        {w: "repellere, repello, reppuli, repulsum", p: "V.", a: "zurückstoßen, vertreiben"},
-        {w: "sedes, sedis", p: "f.", a: "der Platz, der Sitz, der Wohnsitz"},
-        {w: "similis, similis, simile", p: "Adj.", a: "ähnlich"},
-        {w: "statim", p: "Adv.", a: "sofort, auf der Stelle"},
-        {w: "sustinere, sustineo, sustinui", p: "V.", a: "aushalten, ertragen, standhalten"},
-        {w: "tristis, tristis, triste", p: "Adj.", a: "traurig; unfreundlich"},
-        {w: "velle, volo, volui", p: "V.", a: "wollen"},
-        {w: "videre, video, vidi", p: "V.", a: "sehen; darauf achten"},
-        {w: "vitare, vito, vitavi, vitatum", p: "V.", a: "meiden, vermeiden"},
-        {w: "vos", p: "Pron.", a: "ihr"},
-        {w: "vox, vocis", p: "f.", a: "die Stimme, die Äußerung, der Laut"},
-        {w: "vultus, vultus", p: "m.", a: "das Gesicht, der Gesichtsausdruck"},
-        {w: "ales", p: "f.", a: "der Vogel"},
-        {w: "arbor, arboris", p: "f.", a: "der Baum"},
-        {w: "bonus, bona, bonum", p: "Adj.", a: "gut"},
-        {w: "dum + Subj./Ind.", p: "Konj.", a: "während, solange, (so lange) bis"},
-        {w: "fabula, fabulae", p: "f.", a: "die Geschichte, die Erzählung, das Theaterstück"},
-        {w: "habere, habeo", p: "V.", a: "haben, halten"},
-        {w: "in + Abl.", p: "Präp.", a: "in, auf, bei (wo?)"},
-        {w: "laudare, laudo", p: "V.", a: "loben"},
-        {w: "mons, montis", p: "m.", a: "der Berg"},
-        {w: "non", p: "Adv.", a: "nicht"},
-        {w: "ostendere, ostendo, ostendi", p: "V.", a: "zeigen, erklären"},
-        {w: "placere, placeo", p: "V.", a: "gefallen"},
-        {w: "quam", p: "Konj./Adv.", a: "als, wie"},
-        {w: "sedere, sedeo", p: "V.", a: "sitzen"},
-        {w: "sentire, sentio, sensi", p: "V.", a: "fühlen, meinen, wahrnehmen"},
-        {w: "si + Subj.", p: "Konj.", a: "wenn, falls"},
-        {w: "tibi", p: "Pron.", a: "von dir"},
-        {w: "natus, nata, natum", p: "Adj./Part.", a: "das Kind"},
-        {w: "negare, nego, negavi", p: "V.", a: "leugnen, verneinen, ablehnen"},
-        {w: "nisus, nisus", p: "m.", a: "die Anstrengung"},
-        {w: "novissime", p: "Adv.", a: "zuletzt"},
-        {w: "pellis, pellis", p: "f.", a: "die Haut"},
-        {w: "perire, pereo, perii", p: "V.", a: "umkommen, sterben"},
-        {w: "pratum", p: "n.", a: "die Wiese"},
-        {w: "rogare, rogo", p: "V.", a: "bitten, fragen"},
-        {w: "rugosus, rugosa, rugosum", p: "Adj.", a: "runzlig"},
-        {w: "rumpere, rumpo, rupi, ruptum", p: "V.", a: "platzen"},
-        {w: "rursus", p: "Adv.", a: "wieder, noch einmal"},
-        {w: "se", p: "Pron.", a: "sich"},
-        {w: "suus, sua, suum", p: "Poss.-Adj.", a: "ihr, sein"},
-        {w: "tantus, tanta, tantum", p: "Adj.", a: "so groß, so viel"},
-        {w: "tum", p: "Adv.", a: "dann, damals, da"},
-        {w: "validus, valida, validum", p: "Adj.", a: "stark"},
-        {w: "an", p: "Konj.", a: "aber, dagegen, jedoch"},
-        {w: "corpus, corporis", p: "n.", a: "der Körper, der Leichnam"},
-        {w: "cutis, cutis", p: "f.", a: "die Haut"},
-        {w: "dicere, dico, dixi", p: "V.", a: "sagen, sprechen"},
-        {w: "et", p: "Konj.", a: "und, auch"},
-        {w: "iacere, iaceo, iacui", p: "V.", a: "liegen"},
-        {w: "ille, illa, illud", p: "Pron.", a: "jener, jene, jenes"},
-        {w: "imitari", p: "V.", a: "nachahmen"},
-        {w: "indignatus, indignata, indignatum", p: "Adj./Part.", a: "empört"},
-        {w: "inflare", p: "V.", a: "aufblasen"},
-        {w: "inops", p: "Adj./Subst.", a: "ein Schwacher"},
-        {w: "intendere", p: "V.", a: "aufblähen"},
-        {w: "magnitudo, magnitudinis", p: "f.", a: "die Größe"},
-        {w: "tua calamitas", p: "Phrase", a: "du in deinem Unglück"},
-        {w: "tristis nota", p: "Phrase", a: "die bittere Beschimpfung"},
-        {w: "vita, vitae", p: "f.", a: "das Leben, die Lebensweise"},
-        {w: "vitam agere", p: "Phrase", a: "das Leben verbringen"},
-        {w: "at", p: "Konj.", a: "aber, dagegen, jedoch"},
-        {w: "caseus", p: "m.", a: "der Käse"},
-        {w: "corvus, corvi", p: "m.", a: "der Rabe"},
-        {w: "decor, decoris", p: "m.", a: "der Schmuck"},
-        {w: "gerere, gero", p: "V.", a: "tragen, führen, ausführen"},
-        {w: "etiam", p: "Adv.", a: "auch, sogar"},
-        {w: "Aesopus, Aesopi", p: "m.", a: "Äsop"},
-        {w: "agere, ago, egi, actum", p: "V.", a: "handeln, tun; treiben; verhandeln"},
-        {w: "bonum, boni", p: "n.", a: "das Gut, das Gute"},
-        {w: "dare, do, dedi", p: "V.", a: "geben"},
-        {w: "dē-spicere", p: "V.", a: "verachten"},
-        {w: "ex/e + Abl.", p: "Präp.", a: "aus, von ... her"},
-        {w: "exemplum, exempli", p: "n.", a: "das Beispiel, das Vorbild"},
-        {w: "genus, generis", p: "n.", a: "das Geschlecht, die Art, die Abstammung"},
-        {w: "glōriārī", p: "V.", a: "sich rühmen (wegen)"},
-        {w: "graculus", p: "m.", a: "die Dohle"},
-        {w: "habitus, habitus", p: "m.", a: "die Gewohnheit"},
-        {w: "hic, haec, hoc", p: "Pron.", a: "dieser, diese, dieses (hier)"},
-        {w: "incipere, incipio, coepi", p: "V.", a: "anfangen, beginnen"},
-        {w: "libet", p: "V.", a: "es gefällt"},
-        {w: "maerens", p: "Adj./Part.", a: "traurig"},
-        {w: "male mulcatus", p: "Phrase", a: "übel zugerichtet"},
-        {w: "natura, naturae", p: "f.", a: "die Natur, das Wesen, die Beschaffenheit"},
-        {w: "ne + Subj.", p: "Konj.", a: "dass nicht, damit nicht"},
-        {w: "nec; nec ... nec", p: "Konj.", a: "weder ... noch / und nicht"},
-        {w: "nobis", p: "Pron.", a: "uns"},
-        {w: "proprius, propria, proprium", p: "Adj.", a: "eigen"},
-        {w: "-que", p: "Konj.", a: "und; nachgestellt"},
-        {w: "qui, quae, quod", p: "Pron.", a: "welcher, welche, welches; der, die, das"},
-        {w: "quidam, quaedam, quiddam", p: "Pron.", a: "ein gewisser, (irgend)einer"},
-        {w: "redire, redeo, redii", p: "V.", a: "zurückgehen, zurückkehren"},
-        {w: "tuus, tua, tuum", p: "Poss.-Adj.", a: "dein"},
-        {w: "nitor", p: "m.", a: "der Glanz"},
-        {w: "pinna", p: "f.", a: "die Feder"},
-        {w: "quantus, quanta, quantum", p: "Adj./Pron.", a: "wie groß, wie viel"},
-        {w: "mittere, mitto, misi, missum", p: "V.", a: "schicken; werfen"}
-    ];
-
+    let selectedMode = 'p1'; // 'p1' oder 'p2'
     let currentQuestions = [];
     let currentIndex = 0;
-    let score = 0;
+    let xp = 0;
+
+    function selectMode(mode) {
+        selectedMode = mode;
+        document.getElementById('btn-p1').classList.toggle('active', mode === 'p1');
+        document.getElementById('btn-p2').classList.toggle('active', mode === 'p2');
+        const modeName = mode === 'p1' ? 'Phädrus 1' : 'Phädrus 2';
+        document.getElementById('leaderboard-title').innerText = modeName;
+        document.getElementById('save-mode-label').innerText = modeName;
+        document.getElementById('result-leaderboard-title').innerText = modeName;
+        fetchLeaderboard('start-leaderboard-body');
+    }
 
     function startQuiz() {
-        score = 0;
+        const pool = window.vocData ? window.vocData[selectedMode] : [];
+        if (!pool || pool.length === 0) {
+            alert("Vokabeln konnten nicht geladen werden. Stelle sicher, dass voc.js im selben Ordner liegt!");
+            return;
+        }
+
+        xp = 0;
         currentIndex = 0;
-        currentQuestions = [...vocabList].sort(() => 0.5 - Math.random()).slice(0, 20);
+        currentQuestions = [...pool].sort(() => 0.5 - Math.random()).slice(0, 20);
         
         document.getElementById('start-screen').classList.add('hidden');
         document.getElementById('result-screen').classList.add('hidden');
@@ -387,15 +318,15 @@
 
         const q = currentQuestions[currentIndex];
         document.getElementById('question-counter').innerText = `Frage ${currentIndex + 1} von 20`;
-        document.getElementById('score-counter').innerText = `Punkte: ${score}`;
-        document.getElementById('vocab-word').innerText = q.w;
-        document.getElementById('vocab-pos').innerText = q.p;
+        document.getElementById('xp-counter').innerText = `⚡ ${xp} XP`;
+        document.getElementById('vocab-word').innerText = q.latin;
 
-        let options = [q.a];
-        while (options.length < 5) {
-            let randomVocab = vocabList[Math.floor(Math.random() * vocabList.length)];
-            if (!options.includes(randomVocab.a)) {
-                options.push(randomVocab.a);
+        const pool = window.vocData[selectedMode];
+        let options = [q.deutsch];
+        while (options.length < 4 && options.length < pool.length) {
+            let randomVocab = pool[Math.floor(Math.random() * pool.length)];
+            if (!options.includes(randomVocab.deutsch)) {
+                options.push(randomVocab.deutsch);
             }
         }
         options.sort(() => 0.5 - Math.random());
@@ -406,7 +337,7 @@
             const btn = document.createElement('button');
             btn.className = 'option-btn';
             btn.innerText = opt;
-            btn.onclick = () => checkAnswer(btn, opt === q.a);
+            btn.onclick = () => checkAnswer(btn, opt === q.deutsch);
             container.appendChild(btn);
         });
     }
@@ -417,49 +348,60 @@
 
         if (isCorrect) {
             button.classList.add('correct');
-            score++;
+            xp += 10;
         } else {
             button.classList.add('wrong');
+            const q = currentQuestions[currentIndex];
             buttons.forEach(b => {
-                const q = currentQuestions[currentIndex];
-                if (b.innerText === q.a) b.classList.add('correct');
+                if (b.innerText === q.deutsch) b.classList.add('correct');
             });
         }
 
         setTimeout(() => {
             currentIndex++;
             loadQuestion();
-        }, 1200);
+        }, 1100);
     }
 
     function endQuiz() {
         document.getElementById('quiz-screen').classList.add('hidden');
         document.getElementById('result-screen').classList.remove('hidden');
-        document.getElementById('final-score').innerText = score;
-        fetchLeaderboard();
+        document.getElementById('final-xp').innerText = `${xp} XP`;
+        document.getElementById('save-score-box').classList.remove('hidden');
+        fetchLeaderboard('result-leaderboard-body');
+    }
+
+    function resetToStart() {
+        document.getElementById('result-screen').classList.add('hidden');
+        document.getElementById('start-screen').classList.remove('hidden');
+        fetchLeaderboard('start-leaderboard-body');
     }
 
     async function saveScore() {
         const name = document.getElementById('player-name').value.trim() || "Anonym";
         if (!window.db) {
-            alert("Firebase ist noch nicht verbunden. Prüfe die Konsole (F12).");
+            alert("Firebase ist noch nicht verbunden.");
             return;
         }
+
+        const collectionName = selectedMode === 'p1' ? 'highscores_p1' : 'highscores_p2';
+
         try {
-            await window.firebaseModules.addDoc(window.firebaseModules.collection(window.db, "highscores"), {
+            await window.firebaseModules.addDoc(window.firebaseModules.collection(window.db, collectionName), {
                 name: name,
-                score: score,
+                xp: xp,
                 date: new Date().toISOString()
             });
             document.getElementById('save-score-box').classList.add('hidden');
-            fetchLeaderboard();
+            fetchLeaderboard('result-leaderboard-body');
         } catch (e) {
             alert("Fehler beim Speichern: " + e.message);
         }
     }
 
-    async function fetchLeaderboard() {
-        const tbody = document.getElementById('leaderboard-body');
+    async function fetchLeaderboard(targetBodyId) {
+        const tbody = document.getElementById(targetBodyId);
+        if(!tbody) return;
         tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #94a3b8;">Lade...</td></tr>`;
         
         if (!window.db) {
@@ -467,10 +409,12 @@
             return;
         }
 
+        const collectionName = selectedMode === 'p1' ? 'highscores_p1' : 'highscores_p2';
+
         try {
             const q = window.firebaseModules.query(
-                window.firebaseModules.collection(window.db, "highscores"), 
-                window.firebaseModules.orderBy("score", "desc"), 
+                window.firebaseModules.collection(window.db, collectionName), 
+                window.firebaseModules.orderBy("xp", "desc"), 
                 window.firebaseModules.limit(10)
             );
             const querySnapshot = await window.firebaseModules.getDocs(q);
@@ -478,7 +422,7 @@
             let rank = 1;
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
-                tbody.innerHTML += `<tr><td>#${rank++}</td><td>${escapeHtml(data.name)}</td><td><b>${data.score}</b>/20</td></tr>`;
+                tbody.innerHTML += `<tr><td>#${rank++}</td><td>${escapeHtml(data.name)}</td><td><b style="color: var(--xp-color);">${data.xp} XP</b></td></tr>`;
             });
             if(rank === 1) {
                 tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #94a3b8;">Noch keine Einträge vorhanden.</td></tr>`;
@@ -491,6 +435,11 @@
     function escapeHtml(str) {
         return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
+
+    // Beim Laden der Seite Leaderboard initial abrufen
+    window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => fetchLeaderboard('start-leaderboard-body'), 500);
+    });
 </script>
 </body>
 </html>
