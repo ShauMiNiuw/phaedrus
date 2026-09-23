@@ -7,12 +7,31 @@
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="icon.png">
     
-    <!-- Firebase SDKs für Firestore -->
+    <!-- Firebase Initialisierung im Modul (verhindert Timing-Fehler) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-        window.firebaseModules = { initializeApp, getFirestore, collection, addDoc, getDocs, query, orderBy, limit };
+        
+        window.firebaseModules = { collection, addDoc, getDocs, query, orderBy, limit };
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyB1tHZTQv5HAji4PfBNNdEfFekpMlX8n24",
+            authDomain: "phaedrus-4634e.firebaseapp.com",
+            projectId: "phaedrus-4634e",
+            storageBucket: "phaedrus-4634e.firebasestorage.app",
+            messagingSenderId: "547577030892",
+            appId: "1:547577030892:web:416cebb84cede852865dc9"
+        };
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            window.db = getFirestore(app);
+            console.log("Firebase erfolgreich verbunden! 🎉");
+        } catch(e) {
+            console.error("Firebase Initialisierungsfehler:", e);
+        }
     </script>
+
     <style>
         :root {
             --bg-color: #0f172a;
@@ -349,28 +368,6 @@
     let currentIndex = 0;
     let score = 0;
 
-    // Firebase Konfiguration
-    const firebaseConfig = {
-        apiKey: "AIzaSyB1tHZTQv5HAji4PfBNNdEfFekpMlX8n24",
-        authDomain: "phaedrus-4634e.firebaseapp.com",
-        projectId: "phaedrus-4634e",
-        storageBucket: "phaedrus-4634e.firebasestorage.app",
-        messagingSenderId: "547577030892",
-        appId: "1:547577030892:web:416cebb84cede852865dc9"
-    };
-
-    let db = null;
-    try {
-        if (!window.firebaseModules) {
-            throw new Error("Firebase-Module noch nicht geladen.");
-        }
-        const app = window.firebaseModules.initializeApp(firebaseConfig);
-        db = window.firebaseModules.getFirestore(app);
-        console.log("Firebase erfolgreich verbunden!");
-    } catch(e) {
-        console.error("Firebase Initialisierungsfehler:", e);
-    }
-
     function startQuiz() {
         score = 0;
         currentIndex = 0;
@@ -444,12 +441,12 @@
 
     async function saveScore() {
         const name = document.getElementById('player-name').value.trim() || "Anonym";
-        if (!db) {
-            alert("Firebase ist nicht verbunden. Überprüfe die Konsole (F12).");
+        if (!window.db) {
+            alert("Firebase ist noch nicht verbunden. Prüfe die Konsole (F12).");
             return;
         }
         try {
-            await window.firebaseModules.addDoc(window.firebaseModules.collection(db, "highscores"), {
+            await window.firebaseModules.addDoc(window.firebaseModules.collection(window.db, "highscores"), {
                 name: name,
                 score: score,
                 date: new Date().toISOString()
@@ -465,14 +462,14 @@
         const tbody = document.getElementById('leaderboard-body');
         tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #94a3b8;">Lade...</td></tr>`;
         
-        if (!db) {
+        if (!window.db) {
             tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #ef4444;">Firebase nicht verbunden</td></tr>`;
             return;
         }
 
         try {
             const q = window.firebaseModules.query(
-                window.firebaseModules.collection(db, "highscores"), 
+                window.firebaseModules.collection(window.db, "highscores"), 
                 window.firebaseModules.orderBy("score", "desc"), 
                 window.firebaseModules.limit(10)
             );
