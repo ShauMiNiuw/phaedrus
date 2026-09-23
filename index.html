@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phädrus Vokabeltrainer - Live Leaderboard</title>
+    <!-- Firebase SDKs für Firestore -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        window.firebaseModules = { initializeApp, getFirestore, collection, addDoc, getDocs, query, orderBy, limit };
+    </script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-color: #f8fafc;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --success: #22c55e;
+            --error: #ef4444;
+            --border: #334155;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 650px;
+            background: var(--card-bg);
+            border-radius: 24px;
+            padding: 30px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+            box-sizing: border-box;
+        }
+        h1 {
+            text-align: center;
+            margin-top: 0;
+            font-size: 1.8rem;
+            color: #818cf8;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+            color: #94a3b8;
+            font-weight: bold;
+        }
+        .question-card {
+            background: #0f172a;
+            border: 2px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .word {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 8px;
+            color: #f1f5f9;
+        }
+        .pos {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+        .option-btn {
+            background: #334155;
+            color: white;
+            border: none;
+            padding: 14px 18px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .option-btn:hover:not(:disabled) {
+            background: #475569;
+            transform: translateY(-2px);
+        }
+        .option-btn.correct {
+            background: var(--success) !important;
+            color: white;
+        }
+        .option-btn.wrong {
+            background: var(--error) !important;
+            color: white;
+        }
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.2s;
+            margin-top: 10px;
+        }
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            border: 2px solid var(--border);
+            background: #0f172a;
+            color: white;
+            font-size: 1.1rem;
+            box-sizing: border-box;
+            margin-bottom: 15px;
+        }
+        .leaderboard-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .leaderboard-table th, .leaderboard-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .leaderboard-table th {
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📜 Phädrus Vokabeltrainer</h1>
+
+    <!-- Start-Bildschirm -->
+    <div id="start-screen">
+        <p style="text-align: center; color: #94a3b8; margin-bottom: 25px;">Teste dein Wissen mit allen 131 Vokabeln der 1. Stunde (20 Fragen pro Runde).</p>
+        <button class="btn-primary" onclick="startQuiz()">Quiz starten</button>
+    </div>
+
+    <!-- Quiz-Bildschirm -->
+    <div id="quiz-screen" class="hidden">
+        <div class="stats">
+            <span id="question-counter">Frage 1 von 20</span>
+            <span id="score-counter">Punkte: 0</span>
+        </div>
+        <div class="question-card">
+            <div class="word" id="vocab-word">alienus</div>
+            <div class="pos" id="vocab-pos">Adj.</div>
+        </div>
+        <div class="options-grid" id="options-container">
+            <!-- Dynamische Antwortmöglichkeiten -->
+        </div>
+    </div>
+
+    <!-- Ergebnis-Bildschirm -->
+    <div id="result-screen" class="hidden">
+        <h2 style="text-align: center;">Runde beendet! 🎉</h2>
+        <p style="text-align: center; font-size: 1.2rem;">Dein Score: <b id="final-score" style="color: #818cf8;">0</b> von 20</p>
+        
+        <div id="save-score-box">
+            <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 8px;">Trage deinen Namen für das Live-Leaderboard ein:</p>
+            <input type="text" id="player-name" placeholder="Dein Name..." maxlength="20">
+            <button class="btn-primary" onclick="saveScore()">Score speichern</button>
+        </div>
+
+        <h3 style="margin-top: 30px; border-bottom: 2px solid var(--border); padding-bottom: 8px;">🏆 Live Leaderboard</h3>
+        <table class="leaderboard-table">
+            <thead>
+                <tr>
+                    <th>Rang</th>
+                    <th>Name</th>
+                    <th>Punkte</th>
+                </tr>
+            </thead>
+            <tbody id="leaderboard-body">
+                <tr><td colspan="3" style="text-align: center; color: #94a3b8;">Lade Bestenliste...</td></tr>
+            </tbody>
+        </table>
+        <button class="btn-primary" style="margin-top: 20px; background: #334155;" onclick="startQuiz()">Nochmal spielen</button>
+    </div>
+</div>
+
+<script>
+    // Alle 131 Vokabeln aus deiner Datei extrahiert
+    const vocabList = [
+        {w: "alienus, aliena, alienum", p: "Adj.", a: "fremd"},
+        {w: "bellum, belli", p: "n.", a: "der Krieg"},
+        {w: "bos, bovis", p: "m./f.", a: "der Ochse, das Rind"},
+        {w: "calamitas, calamitatis", p: "f.", a: "das Unglück, der Schaden"},
+        {w: "conspicere, conspicio, conspexi", p: "V.", a: "erblicken"},
+        {w: "contentus, contenta, contentum", p: "Adj.", a: "zufrieden"},
+        {w: "cum + Subj./Ind.", p: "Konj.", a: "als (plötzlich), zu der Zeit als, immer wenn; während, solange, bis"},
+        {w: "esse, sum, fui", p: "V.", a: "sein, sich befinden"},
+        {w: "experiri, experior, expertus sum", p: "V.", a: "versuchen, ausprobieren, riskieren"},
+        {w: "ingens, ingens, ingens; Gen. ingentis", p: "Adj.", a: "gewaltig, ungeheuer, riesig"},
+        {w: "iniuria, iniuriae", p: "f.", a: "das Unrecht, die Beleidigung"},
+        {w: "invidia, invidiae", p: "f.", a: "der Neid, der Hass"},
+        {w: "latus, lata, latum", p: "Adj.", a: "breit, weit"},
+        {w: "maior, maior, maius; Gen. maioris", p: "Adj.", a: "größer"},
+        {w: "modus, modi", p: "m.", a: "die Art, die Weise; das Maß"},
+        {w: "movere, moveo, movi, motum", p: "V.", a: "bewegen, beeindrucken"},
+        {w: "noster, nostra, nostrum", p: "Poss.-Adj.", a: "unser"},
+        {w: "os, oris", p: "n.", a: "der Mund, das Gesicht"},
+        {w: "pati, patior, passus sum", p: "V.", a: "leiden, erleiden, ertragen; zulassen"},
+        {w: "potens, potentis", p: "Adj.", a: "mächtig, einflussreich, stark"},
+        {w: "potius", p: "Adv.", a: "eher, lieber"},
+        {w: "prius", p: "Adv.", a: "früher, zuerst"},
+        {w: "quaerere, quaero, quaesivi, quaesitum", p: "V.", a: "suchen, untersuchen; erwerben, anstreben; fragen"},
+        {w: "queri, queror, questus sum", p: "V.", a: "klagen, sich beklagen (über)"},
+        {w: "quis?", p: "Pron.", a: "wer?"},
+        {w: "quondam", p: "Adv.", a: "einst, einmal; manchmal"},
+        {w: "rana", p: "f.", a: "der Frosch"},
+        {w: "repellere, repello, reppuli, repulsum", p: "V.", a: "zurückstoßen, vertreiben"},
+        {w: "sedes, sedis", p: "f.", a: "der Platz, der Sitz, der Wohnsitz"},
+        {w: "similis, similis, simile", p: "Adj.", a: "ähnlich"},
+        {w: "statim", p: "Adv.", a: "sofort, auf der Stelle"},
+        {w: "sustinere, sustineo, sustinui", p: "V.", a: "aushalten, ertragen, standhalten"},
+        {w: "tristis, tristis, triste", p: "Adj.", a: "traurig; unfreundlich"},
+        {w: "velle, volo, volui", p: "V.", a: "wollen"},
+        {w: "videre, video, vidi", p: "V.", a: "sehen; darauf achten"},
+        {w: "vitare, vito, vitavi, vitatum", p: "V.", a: "meiden, vermeiden"},
+        {w: "vos", p: "Pron.", a: "ihr"},
+        {w: "vox, vocis", p: "f.", a: "die Stimme, die Äußerung, der Laut"},
+        {w: "vultus, vultus", p: "m.", a: "das Gesicht, der Gesichtsausdruck"},
+        {w: "ales", p: "f.", a: "der Vogel"},
+        {w: "arbor, arboris", p: "f.", a: "der Baum"},
+        {w: "bonus, bona, bonum", p: "Adj.", a: "gut"},
+        {w: "dum + Subj./Ind.", p: "Konj.", a: "während, solange, (so lange) bis"},
+        {w: "fabula, fabulae", p: "f.", a: "die Geschichte, die Erzählung, das Theaterstück"},
+        {w: "habere, habeo", p: "V.", a: "haben, halten"},
+        {w: "in + Abl.", p: "Präp.", a: "in, auf, bei (wo?)"},
+        {w: "laudare, laudo", p: "V.", a: "loben"},
+        {w: "mons, montis", p: "m.", a: "der Berg"},
+        {w: "non", p: "Adv.", a: "nicht"},
+        {w: "ostendere, ostendo, ostendi", p: "V.", a: "zeigen, erklären"},
+        {w: "placere, placeo", p: "V.", a: "gefallen"},
+        {w: "quam", p: "Konj./Adv.", a: "als, wie"},
+        {w: "sedere, sedeo", p: "V.", a: "sitzen"},
+        {w: "sentire, sentio, sensi", p: "V.", a: "fühlen, meinen, wahrnehmen"},
+        {w: "si + Subj.", p: "Konj.", a: "wenn, falls"},
+        {w: "tibi", p: "Pron.", a: "von dir"},
+        {w: "natus, nata, natum", p: "Adj./Part.", a: "das Kind"},
+        {w: "negare, nego, negavi", p: "V.", a: "leugnen, verneinen, ablehnen"},
+        {w: "nisus, nisus", p: "m.", a: "die Anstrengung"},
+        {w: "novissime", p: "Adv.", a: "zuletzt"},
+        {w: "pellis, pellis", p: "f.", a: "die Haut"},
+        {w: "perire, pereo, perii", p: "V.", a: "umkommen, sterben"},
+        {w: "pratum", p: "n.", a: "die Wiese"},
+        {w: "rogare, rogo", p: "V.", a: "bitten, fragen"},
+        {w: "rugosus, rugosa, rugosum", p: "Adj.", a: "runzlig"},
+        {w: "rumpere, rumpo, rupi, ruptum", p: "V.", a: "platzen"},
+        {w: "rursus", p: "Adv.", a: "wieder, noch einmal"},
+        {w: "se", p: "Pron.", a: "sich"},
+        {w: "suus, sua, suum", p: "Poss.-Adj.", a: "ihr, sein"},
+        {w: "tantus, tanta, tantum", p: "Adj.", a: "so groß, so viel"},
+        {w: "tum", p: "Adv.", a: "dann, damals, da"},
+        {w: "validus, valida, validum", p: "Adj.", a: "stark"},
+        {w: "an", p: "Konj.", a: "aber, dagegen, jedoch"},
+        {w: "corpus, corporis", p: "n.", a: "der Körper, der Leichnam"},
+        {w: "cutis, cutis", p: "f.", a: "die Haut"},
+        {w: "dicere, dico, dixi", p: "V.", a: "sagen, sprechen"},
+        {w: "et", p: "Konj.", a: "und, auch"},
+        {w: "iacere, iaceo, iacui", p: "V.", a: "liegen"},
+        {w: "ille, illa, illud", p: "Pron.", a: "jener, jene, jenes"},
+        {w: "imitari", p: "V.", a: "nachahmen"},
+        {w: "indignatus, indignata, indignatum", p: "Adj./Part.", a: "empört"},
+        {w: "inflare", p: "V.", a: "aufblasen"},
+        {w: "inops", p: "Adj./Subst.", a: "ein Schwacher"},
+        {w: "intendere", p: "V.", a: "aufblähen"},
+        {w: "magnitudo, magnitudinis", p: "f.", a: "die Größe"},
+        {w: "tua calamitas", p: "Phrase", a: "du in deinem Unglück"},
+        {w: "tristis nota", p: "Phrase", a: "die bittere Beschimpfung"},
+        {w: "vita, vitae", p: "f.", a: "das Leben, die Lebensweise"},
+        {w: "vitam agere", p: "Phrase", a: "das Leben verbringen"},
+        {w: "at", p: "Konj.", a: "aber, dagegen, jedoch"},
+        {w: "caseus", p: "m.", a: "der Käse"},
+        {w: "corvus, corvi", p: "m.", a: "der Rabe"},
+        {w: "decor, decoris", p: "m.", a: "der Schmuck"},
+        {w: "gerere, gero", p: "V.", a: "tragen, führen, ausführen"},
+        {w: "etiam", p: "Adv.", a: "auch, sogar"},
+        {w: "Aesopus, Aesopi", p: "m.", a: "Äsop"},
+        {w: "agere, ago, egi, actum", p: "V.", a: "handeln, tun; treiben; verhandeln"},
+        {w: "bonum, boni", p: "n.", a: "das Gut, das Gute"},
+        {w: "dare, do, dedi", p: "V.", a: "geben"},
+        {w: "dē-spicere", p: "V.", a: "verachten"},
+        {w: "ex/e + Abl.", p: "Präp.", a: "aus, von ... her"},
+        {w: "exemplum, exempli", p: "n.", a: "das Beispiel, das Vorbild"},
+        {w: "genus, generis", p: "n.", a: "das Geschlecht, die Art, die Abstammung"},
+        {w: "glōriārī", p: "V.", a: "sich rühmen (wegen)"},
+        {w: "graculus", p: "m.", a: "die Dohle"},
+        {w: "habitus, habitus", p: "m.", a: "die Gewohnheit"},
+        {w: "hic, haec, hoc", p: "Pron.", a: "dieser, diese, dieses (hier)"},
+        {w: "incipere, incipio, coepi", p: "V.", a: "anfangen, beginnen"},
+        {w: "libet", p: "V.", a: "es gefällt"},
+        {w: "maerens", p: "Adj./Part.", a: "traurig"},
+        {w: "male mulcatus", p: "Phrase", a: "übel zugerichtet"},
+        {w: "natura, naturae", p: "f.", a: "die Natur, das Wesen, die Beschaffenheit"},
+        {w: "ne + Subj.", p: "Konj.", a: "dass nicht, damit nicht"},
+        {w: "nec; nec ... nec", p: "Konj.", a: "weder ... noch / und nicht"},
+        {w: "nobis", p: "Pron.", a: "uns"},
+        {w: "proprius, propria, proprium", p: "Adj.", a: "eigen"},
+        {w: "-que", p: "Konj.", a: "und; nachgestellt"},
+        {w: "qui, quae, quod", p: "Pron.", a: "welcher, welche, welches; der, die, das"},
+        {w: "quidam, quaedam, quiddam", p: "Pron.", a: "ein gewisser, (irgend)einer"},
+        {w: "redire, redeo, redii", p: "V.", a: "zurückgehen, zurückkehren"},
+        {w: "tuus, tua, tuum", p: "Poss.-Adj.", a: "dein"},
+        {w: "nitor", p: "m.", a: "der Glanz"},
+        {w: "pinna", p: "f.", a: "die Feder"},
+        {w: "quantus, quanta, quantum", p: "Adj./Pron.", a: "wie groß, wie viel"},
+        {w: "mittere, mitto, misi, missum", p: "V.", a: "schicken; werfen"}
+    ];
+
+    let currentQuestions = [];
+    let currentIndex = 0;
+    let score = 0;
+
+    // Firebase Konfiguration (Hier trägst du später deine Firebase-Daten ein)
+const firebaseConfig = {
+  apiKey: "AIzaSyB1tHZTQv5HAji4PfBNNdEfFekpMlX8n24",
+  authDomain: "phaedrus-4634e.firebaseapp.com",
+  projectId: "phaedrus-4634e",
+  storageBucket: "phaedrus-4634e.firebasestorage.app",
+  messagingSenderId: "547577030892",
+  appId: "1:547577030892:web:416cebb84cede852865dc9"
+};
+
+
+    let db = null;
+    try {
+        const app = window.firebaseModules.initializeApp(firebaseConfig);
+        db = window.firebaseModules.getFirestore(app);
+    } catch(e) {
+        console.log("Firebase nicht initialisiert (Demo-Modus / Platzhalter).");
+    }
+
+    function startQuiz() {
+        score = 0;
+        currentIndex = 0;
+        // 20 zufällige Fragen auswählen
+        currentQuestions = [...vocabList].sort(() => 0.5 - Math.random()).slice(0, 20);
+        
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('result-screen').classList.add('hidden');
+        document.getElementById('quiz-screen').classList.remove('hidden');
+        loadQuestion();
+    }
+
+    function loadQuestion() {
+        if (currentIndex >= currentQuestions.length) {
+            endQuiz();
+            return;
+        }
+
+        const q = currentQuestions[currentIndex];
+        document.getElementById('question-counter').innerText = `Frage ${currentIndex + 1} von 20`;
+        document.getElementById('score-counter').innerText = `Punkte: ${score}`;
+        document.getElementById('vocab-word').innerText = q.w;
+        document.getElementById('vocab-pos').innerText = q.p;
+
+        // 4 falsche Antworten + 1 richtige Antwort ermitteln
+        let options = [q.a];
+        while (options.length < 5) {
+            let randomVocab = vocabList[Math.floor(Math.random() * vocabList.length)];
+            if (!options.includes(randomVocab.a)) {
+                options.push(randomVocab.a);
+            }
+        }
+        // Mischen
+        options.sort(() => 0.5 - Math.random());
+
+        const container = document.getElementById('options-container');
+        container.innerHTML = '';
+        options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.innerText = opt;
+            btn.onclick = () => checkAnswer(btn, opt === q.a);
+            container.appendChild(btn);
+        });
+    }
+
+    function checkAnswer(button, isCorrect) {
+        const buttons = document.querySelectorAll('.option-btn');
+        buttons.forEach(b => b.disabled = true);
+
+        if (isCorrect) {
+            button.classList.add('correct');
+            score++;
+        } else {
+            button.classList.add('wrong');
+            // Zeige die richtige an
+            buttons.forEach(b => {
+                const q = currentQuestions[currentIndex];
+                if (b.innerText === q.a) b.classList.add('correct');
+            });
+        }
+
+        setTimeout(() => {
+            currentIndex++;
+            loadQuestion();
+        }, 1200);
+    }
+
+    function endQuiz() {
+        document.getElementById('quiz-screen').classList.add('hidden');
+        document.getElementById('result-screen').classList.remove('hidden');
+        document.getElementById('final-score').innerText = score;
+        fetchLeaderboard();
+    }
+
+    async function saveScore() {
+        const name = document.getElementById('player-name').value.trim() || "Anonym";
+        if (!db) {
+            alert("Firebase ist noch nicht konfiguriert! Trage deine Firebase-Config im Code ein.");
+            return;
+        }
+        try {
+            await window.firebaseModules.addDoc(window.firebaseModules.collection(db, "highscores"), {
+                name: name,
+                score: score,
+                date: new Date().toISOString()
+            });
+            document.getElementById('save-score-box').classList.add('hidden');
+            fetchLeaderboard();
+        } catch (e) {
+            alert("Fehler beim Speichern: " + e.message);
+        }
+    }
+
+    async function fetchLeaderboard() {
+        const tbody = document.getElementById('leaderboard-body');
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #94a3b8;">Lade...</td></tr>`;
+        
+        if (!db) {
+            tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #ef4444;">Firebase-Config fehlt (Demo-Modus)</td></tr>`;
+            return;
+        }
+
+        try {
+            const q = window.firebaseModules.query(
+                window.firebaseModules.collection(db, "highscores"), 
+                window.firebaseModules.orderBy("score", "desc"), 
+                window.firebaseModules.limit(10)
+            );
+            const querySnapshot = await window.firebaseModules.getDocs(q);
+            tbody.innerHTML = '';
+            let rank = 1;
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                tbody.innerHTML += `<tr><td>#${rank++}</td><td>${escapeHtml(data.name)}</td><td><b>${data.score}</b>/20</td></tr>`;
+            });
+            if(rank === 1) {
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #94a3b8;">Noch keine Einträge vorhanden.</td></tr>`;
+            }
+        } catch (e) {
+            tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #ef4444;">Fehler beim Laden.</td></tr>`;
+        }
+    }
+
+    function escapeHtml(str) {
+        return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+</script>
+</body>
+</html>
